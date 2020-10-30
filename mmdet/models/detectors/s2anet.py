@@ -1,5 +1,5 @@
 import os.path as osp
-
+import torch
 import torch.nn as nn
 
 from mmdet.core import bbox2result
@@ -7,6 +7,7 @@ from mmdet.core import bbox2result
 from .. import builder
 from ..registry import DETECTORS
 from .rbox_base import RboxBaseDetector
+from ..necks.dynamic_route import SpatialGate
 
 
 @DETECTORS.register_module
@@ -67,6 +68,12 @@ class S2ANetDetector(RboxBaseDetector):
         loss_inputs = outs + (gt_bboxes, gt_labels, img_metas, self.train_cfg)
         losses = self.rbox_head.loss(
             *loss_inputs, gt_bboxes_ignore=gt_bboxes_ignore)
+        # magic!!! solved memory leak 
+        for module in self.modules():
+            if isinstance(module, SpatialGate):
+                module.clear_running_cost()
+        del outs, loss_inputs
+        torch.cuda.empty_cache()
         return losses
 
     def simple_test(self, img, img_meta, rescale=False):
